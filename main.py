@@ -18,6 +18,13 @@ test_dataset = dataset.GANDataset('D:\\CycleGAN_Data\\horse2zebra\\test\\A',
                                   'D:\\CycleGAN_Data\\horse2zebra\\test\\B',
                                   transform=config.transforms)
 
+# train_dataset = dataset.GANDataset(
+#     root_type1=config.TRAIN_DIR + "/A", root_type2=config.TRAIN_DIR + "/B", transform=config.transforms
+# )
+# test_dataset = dataset.GANDataset(
+#     root_type1=config.VAL_DIR + "/A", root_type2=config.VAL_DIR + "/B", transform=config.transforms
+# )
+
 epoch = 200
 lr = 0.0002
 batch_size = 4
@@ -41,22 +48,22 @@ lossfunc_mse = nn.MSELoss()
 lossfunc_L1 = nn.L1Loss()
 
 generator1 = generator.Generator(img_channels, num_residuals=9).to(device=device)
-discriminator1 = discriminator.Discriminator(input_channels=img_channels).to(device=device)
+# discriminator1 = discriminator.Discriminator(input_channels=img_channels).to(device=device)
 
 generator2 = generator.Generator(img_channels, num_residuals=9).to(device=device)
-discriminator2 = discriminator.Discriminator(input_channels=img_channels).to(device=device)
+# discriminator2 = discriminator.Discriminator(input_channels=img_channels).to(device=device)
 print('Finish loading data!')
 
 optimizer_gen = optim.Adam(list(generator1.parameters()) + list(generator2.parameters()),
                            lr=lr, betas=(0.5, 0.999))
 scheduler_gen = optim.lr_scheduler.LambdaLR(optimizer_gen, lr_lambda=lambda_rule)
 
-optimizer_dis = optim.Adam(list(discriminator1.parameters()) + list(discriminator2.parameters()),
-                           lr=lr, betas=(0.5, 0.999))
-scheduler_dis = optim.lr_scheduler.LambdaLR(optimizer_dis, lr_lambda=lambda_rule)
+# optimizer_dis = optim.Adam(list(discriminator1.parameters()) + list(discriminator2.parameters()),
+#                            lr=lr, betas=(0.5, 0.999))
+# scheduler_dis = optim.lr_scheduler.LambdaLR(optimizer_dis, lr_lambda=lambda_rule)
 
 scaler_gen = torch.cuda.amp.GradScaler()
-scaler_dis = torch.cuda.amp.GradScaler()
+# scaler_dis = torch.cuda.amp.GradScaler()
 
 print('finish creating models')
 
@@ -160,28 +167,28 @@ if config.LOAD_MODEL:
     util.load_checkpoint(
         config.SAVE_DIR, config.CHECKPOINT_GEN_2, generator2, optimizer_gen, config.LEARNING_RATE,
     )
-    util.load_checkpoint(
-        config.SAVE_DIR, config.CHECKPOINT_DIS_1, discriminator1, optimizer_dis, config.LEARNING_RATE,
-    )
-    util.load_checkpoint(
-        config.SAVE_DIR, config.CHECKPOINT_DIS_2, discriminator2, optimizer_dis, config.LEARNING_RATE,
-    )
+    # util.load_checkpoint(
+    #     config.SAVE_DIR, config.CHECKPOINT_DIS_1, discriminator1, optimizer_dis, config.LEARNING_RATE,
+    # )
+    # util.load_checkpoint(
+    #     config.SAVE_DIR, config.CHECKPOINT_DIS_2, discriminator2, optimizer_dis, config.LEARNING_RATE,
+    # )
 
 
 if __name__ == '__main__':
-    for i in range(epoch):
-        print('epoch: ', i+1)
-
-        train(generator1, discriminator1, generator2, discriminator2
-              , device, train_loader, scheduler_gen, scheduler_dis
-              , optimizer_gen, optimizer_dis
-              , scaler_gen, scaler_dis
-              , lossfunc_mse, lossfunc_L1, batch_size, i+1)
-        if config.SAVE_MODEL:
-            util.save_checkpoint(generator1, optimizer_gen, config.SAVE_DIR, filename=config.CHECKPOINT_GEN_1)
-            util.save_checkpoint(generator2, optimizer_gen, config.SAVE_DIR, filename=config.CHECKPOINT_GEN_2)
-            util.save_checkpoint(discriminator1, optimizer_dis, config.SAVE_DIR, filename=config.CHECKPOINT_DIS_1)
-            util.save_checkpoint(discriminator2, optimizer_dis, config.SAVE_DIR,  filename=config.CHECKPOINT_DIS_2)
+    # for i in range(epoch):
+    #     print('epoch: ', i+1)
+    #
+    #     train(generator1, discriminator1, generator2, discriminator2
+    #           , device, train_loader, scheduler_gen, scheduler_dis
+    #           , optimizer_gen, optimizer_dis
+    #           , scaler_gen, scaler_dis
+    #           , lossfunc_mse, lossfunc_L1, batch_size, i+1)
+    #     if config.SAVE_MODEL:
+    #         util.save_checkpoint(generator1, optimizer_gen, config.SAVE_DIR, filename=config.CHECKPOINT_GEN_1)
+    #         util.save_checkpoint(generator2, optimizer_gen, config.SAVE_DIR, filename=config.CHECKPOINT_GEN_2)
+    #         util.save_checkpoint(discriminator1, optimizer_dis, config.SAVE_DIR, filename=config.CHECKPOINT_DIS_1)
+    #         util.save_checkpoint(discriminator2, optimizer_dis, config.SAVE_DIR,  filename=config.CHECKPOINT_DIS_2)
 
     type1_name = 'horse'
     type2_name = 'zebra'
