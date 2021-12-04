@@ -24,8 +24,8 @@ def train_fn(disc_H, disc_Z, gen_Z, gen_H, loader, opt_disc, opt_gen, l1, mse, d
         # Train Discriminators H and Z
         with torch.cuda.amp.autocast():
             fake_horse = gen_H(zebra)
-            D_H_real = disc_H(horse)
-            D_H_fake = disc_H(fake_horse.detach())
+            D_H_real, D_H_real_feat = disc_H(horse)
+            D_H_fake, _ = disc_H(fake_horse.detach())
             H_reals += D_H_real.mean().item()
             H_fakes += D_H_fake.mean().item()
             D_H_real_loss = mse(D_H_real, torch.ones_like(D_H_real))
@@ -33,8 +33,8 @@ def train_fn(disc_H, disc_Z, gen_Z, gen_H, loader, opt_disc, opt_gen, l1, mse, d
             D_H_loss = D_H_real_loss + D_H_fake_loss
 
             fake_zebra = gen_Z(horse)
-            D_Z_real = disc_Z(zebra)
-            D_Z_fake = disc_Z(fake_zebra.detach())
+            D_Z_real, D_Z_real_feat = disc_Z(zebra)
+            D_Z_fake, _ = disc_Z(fake_zebra.detach())
             D_Z_real_loss = mse(D_Z_real, torch.ones_like(D_Z_real))
             D_Z_fake_loss = mse(D_Z_fake, torch.zeros_like(D_Z_fake))
             D_Z_loss = D_Z_real_loss + D_Z_fake_loss
@@ -43,15 +43,15 @@ def train_fn(disc_H, disc_Z, gen_Z, gen_H, loader, opt_disc, opt_gen, l1, mse, d
             D_loss = (D_H_loss + D_Z_loss) / 2
 
         opt_disc.zero_grad()
-        d_scaler.scale(D_loss).backward()
+        d_scaler.scale(D_loss).backward(retain_graph=True)
         d_scaler.step(opt_disc)
         d_scaler.update()
 
         # Train Generators H and Z
         with torch.cuda.amp.autocast():
             # adversarial loss for both generators
-            D_H_fake = disc_H(fake_horse)
-            D_Z_fake = disc_Z(fake_zebra)
+            D_H_fake, D_H_fake_feat = disc_H(fake_horse)
+            D_Z_fake, D_Z_fake_feat = disc_Z(fake_zebra)
             loss_G_H = mse(D_H_fake, torch.ones_like(D_H_fake))
             loss_G_Z = mse(D_Z_fake, torch.ones_like(D_Z_fake))
 
@@ -67,18 +67,25 @@ def train_fn(disc_H, disc_Z, gen_Z, gen_H, loader, opt_disc, opt_gen, l1, mse, d
             identity_zebra_loss = l1(zebra, identity_zebra)
             identity_horse_loss = l1(horse, identity_horse)
 
+            #feature matching loss
+            feat_zebra_loss = l1(D_Z_real_feat, D_Z_fake_feat)
+            feat_horse_loss = l1(D_H_real_feat, D_H_fake_feat)
+
+
             # add all togethor
             G_loss = (
                     loss_G_Z
                     + loss_G_H
                     + cycle_zebra_loss * config.LAMBDA_CYCLE
                     + cycle_horse_loss * config.LAMBDA_CYCLE
-                    + identity_horse_loss * config.LAMBDA_IDENTITY
                     + identity_zebra_loss * config.LAMBDA_IDENTITY
+                    + identity_horse_loss * config.LAMBDA_IDENTITY
+                    + feat_zebra_loss * config.LAMBDA_FEATURE
+                    + feat_horse_loss * config.LAMBDA_FEATURE
             )
 
         opt_gen.zero_grad()
-        g_scaler.scale(G_loss).backward()
+        g_scaler.scale(G_loss).backward(retain_graph=True)
         g_scaler.step(opt_gen)
         g_scaler.update()
     print(f"Epoch: {epoch_idx} Loss D.: {D_loss}")
@@ -97,7 +104,7 @@ def test(generator1, generator2, device, test_loader, type1_name, type2_name):
         save_image(type2_generated * 0.5 + 0.5, f"saved_images/{type2_name}_{num+1}.png")
         num = num + 2
 
-def main(testmode=False):
+def main():
     disc_H = Discriminator(input_channels=3).to(config.DEVICE)
     disc_Z = Discriminator(input_channels=3).to(config.DEVICE)
     gen_Z = Generator(img_channels=3, num_residuals=9).to(config.DEVICE)
@@ -154,18 +161,18 @@ def main(testmode=False):
     )
     g_scaler = torch.cuda.amp.GradScaler()
     d_scaler = torch.cuda.amp.GradScaler()
-    if not testmode:
-        for epoch in range(config.NUM_EPOCHS):
-            train_fn(disc_H, disc_Z, gen_Z, gen_H, loader, opt_disc, opt_gen, L1, mse, d_scaler, g_scaler, epoch)
 
-            if config.SAVE_MODEL:
-                save_checkpoint(gen_H, opt_gen, config.SAVE_DIR, filename=config.CHECKPOINT_GEN_1)
-                save_checkpoint(gen_Z, opt_gen,config.SAVE_DIR,  filename=config.CHECKPOINT_GEN_2)
-                save_checkpoint( disc_H, opt_disc, config.SAVE_DIR, filename=config.CHECKPOINT_DIS_1)
-                save_checkpoint(disc_Z, opt_disc, config.SAVE_DIR, filename=config.CHECKPOINT_DIS_2)
-    else:
-        type1_name = 'horse'
-        type2_name = 'zebra'
-        test(gen_H, gen_Z, config.DEVICE, val_loader, type1_name, type2_name)
+    for epoch in range(config.NUM_EPOCHS):
+        train_fn(disc_H, disc_Z, gen_Z, gen_H, loader, opt_disc, opt_gen, L1, mse, d_scaler, g_scaler, epoch)
+
+        if config.SAVE_MODEL:
+            save_checkpoint(gen_H, opt_gen, config.SAVE_DIR, filename=config.CHECKPOINT_GEN_1)
+            save_checkpoint(gen_Z, opt_gen,config.SAVE_DIR,  filename=config.CHECKPOINT_GEN_2)
+            save_checkpoint( disc_H, opt_disc, config.SAVE_DIR, filename=config.CHECKPOINT_DIS_1)
+            save_checkpoint(disc_Z, opt_disc, config.SAVE_DIR, filename=config.CHECKPOINT_DIS_2)
+
+    type1_name = 'horse'
+    type2_name = 'zebra'
+    test(gen_H, gen_Z, config.DEVICE, val_loader, type1_name, type2_name)
 if __name__ == "__main__":
-    main(False)
+    main()
